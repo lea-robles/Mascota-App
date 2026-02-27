@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mascotas Perdidas App</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+    <h1>🐾 Mascota perdida</h1>
+    <div id="user-auth">
+    <button id="btn-mis-posts" class="hidden" title="Mis Publicaciones">
+        <i class="fas fa-paste"></i>
+    </button>
+    <button id="btn-bandeja" class="hidden" title="Mis Mensajes">
+        <i class="fas fa-envelope"></i>
+        <span id="notif-count" class="hidden"></span>
+    </button>
+    
+    <div id="popover-bandeja" class="hidden">
+        <h3>Mis Mensajes</h3>
+        <div id="lista-chats">
+            <p class="msg">No tienes mensajes nuevos.</p>
+        </div>
+    </div>
+
+    <button id="btn-login">Ingresar</button>
+</div>
+</header>
+
+    <main>
+        <section id="city-selector">
+            <h2>¿Dónde te encuentras?</h2>
+            <div class="search-group">
+                <select id="select-provincia">
+                    <option value="">Cargando provincias...</option>
+                </select>
+
+                <select id="select-ciudad" disabled>
+                    <option value="">Selecciona una provincia primero</option>
+                </select>
+            </div>
+        </section>
+
+        <section id="actions" class="hidden">
+            <div id="bandeja-entrada" class="hidden">
+                <h3><i class="fas fa-inbox"></i> Mis Mensajes Recibidos</h3>
+                <div id="lista-chats">
+                    <p class="msg">No tienes mensajes nuevos.</p>
+                </div>
+                <hr>
+            </div>
+
+            <button class="btn-primary" id="btn-mostrar-formulario">Reportar Mascota</button>
+
+            <div id="formulario-reporte" class="hidden">
+                <h3>Nuevo Reporte</h3>
+
+                <input type="text" id="nombre-mascota" placeholder="Nombre de la mascota">
+
+                <select id="tipo-mascota">
+                    <option value="Perro">Perro</option>
+                    <option value="Gato">Gato</option>
+                    <option value="Otro">Otro</option>
+                </select>
+
+                <select id="genero-mascota">
+                    <option value="Macho">Macho</option>
+                    <option value="Hembra">Hembra</option>
+                    <option value="Desconocido">No lo sé</option>
+                </select>
+
+                <input type="text" id="barrio-mascota" placeholder="Barrio / Zona">
+
+                <select id="estado-mascota">
+                    <option value="Perdido">Lo perdí</option>
+                    <option value="Encontrado">Lo encontré</option>
+                </select>
+
+                <select id="form-provincia">
+                    <option value="">Selecciona Provincia</option>
+                </select>
+
+                <select id="form-ciudad" disabled>
+                    <option value="">Selecciona una provincia primero</option>
+                </select>
+
+                <input type="text" id="foto-link" placeholder="Link de la foto">
+                
+                <label for="telefono-mascota">WhatsApp de contacto (Opcional):</label>
+                <input type="tel" id="telefono-mascota" placeholder="Ej: +54911...">
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="permite-chat" checked>
+                    <label for="permite-chat">Permitir que me contacten por el chat de la app</label>
+                </div>
+                
+                <p><small>Al publicar, aceptas que la app es un facilitador y no se responsabiliza por el intercambio de datos entre usuarios.</small></p>
+                
+                <button id="btn-enviar-reporte" class="btn-primary">Publicar ahora</button>
+            </div>
+        </section>
+
+        <section id="feed">
+            <div id="filters" class="hidden">
+                <span>Filtrar por:</span>
+                <button class="btn-filter" data-tipo="Todos">Todos</button>
+                <button class="btn-filter" data-tipo="Perro">Perros</button>
+                <button class="btn-filter" data-tipo="Gato">Gatos</button>
+                <button class="btn-filter" data-tipo="Otro">Otros</button>
+            </div>
+            <div id="lista-mascotas">
+                <p class="msg">Por favor, selecciona provincia y ciudad para ver reportes.</p>
+            </div>
+        </section>
+    </main>
+
+    <div id="ventana-chat" class="hidden">
+        <div class="chat-header">
+            <span id="chat-titulo">Chat</span>
+            <button onclick="window.cerrarChat()">×</button>
+        </div>
+        <div id="chat-mensajes"></div>
+        <div class="chat-input">
+            <input type="text" id="input-mensaje" placeholder="Escribe un mensaje...">
+            <button id="btn-enviar-mensaje"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+    <div id="modal-editar" class="hidden-overlay">
+    <div class="modal-content">
+        <h3>Editar Publicación</h3>
+        <input type="text" id="edit-nombre">
+        <input type="text" id="edit-barrio">
+        <select id="edit-estado">
+            <option value="Perdido">Perdido</option>
+            <option value="Encontrado">Encontrado</option>
+        </select>
+        <div class="modal-buttons">
+            <button onclick="cerrarModalEdicion()">Cancelar</button>
+            <button id="btn-guardar-cambios" class="btn-primary">Guardar</button>
+        </div>
+    </div>
+</div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
