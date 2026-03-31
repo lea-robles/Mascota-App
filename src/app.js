@@ -183,12 +183,12 @@ window.showDashboard = async () => {
     // Actualizar estado
     window.updateLocationState(provincia, ciudad);
 
-    // Cargar publicaciones
-    const publicaciones = await PostService.fetchByLocation(provincia, ciudad);
+    // Cargar publicaciones (pasar userId para validar privacidad)
+    const publicaciones = await PostService.fetchByLocation(provincia, ciudad, GlobalState.currentUser?.id);
     const contenedor = document.getElementById('container-publicaciones');
     
     if (contenedor && GlobalState.currentUser) {
-      RenderCards.draw(contenedor, publicaciones, GlobalState.currentUser.email);
+      RenderCards.draw(contenedor, publicaciones, GlobalState.currentUser);
     }
   } catch (error) {
     console.error('Error al cargar dashboard:', error);
