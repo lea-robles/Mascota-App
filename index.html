@@ -1,151 +1,119 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mascotas Perdidas App</title>
-    <link rel="stylesheet" href="style.css">
+    <title>MascotasApp - Tandil</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+<body class="bg-gray-50 min-h-screen">
 
-<body>
-    <header>
-    <h1>🐾 Mascota perdida</h1>
-    <div id="user-auth">
-    <button id="btn-mis-posts" class="hidden" title="Mis Publicaciones">
-        <i class="fas fa-paste"></i>
-    </button>
-    <button id="btn-bandeja" class="hidden" title="Mis Mensajes">
-        <i class="fas fa-envelope"></i>
-        <span id="notif-count" class="hidden"></span>
-    </button>
-    
-    <div id="popover-bandeja" class="hidden">
-        <h3>Mis Mensajes</h3>
-        <div id="lista-chats">
-            <p class="msg">No tienes mensajes nuevos.</p>
-        </div>
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-indigo-600"></div>
     </div>
 
-    <button id="btn-login">Ingresar</button>
-</div>
-</header>
+    <section id="view-welcome" class="hidden flex flex-col items-center justify-center min-h-screen p-6 text-center">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-4">MascotasApp</h1>
+        <p class="text-gray-600 mb-8 max-w-md">Ayuda a las mascotas de tu ciudad a volver a casa.</p>
+        <button onclick="window.loginConGoogle()" class="bg-white border border-gray-300 px-6 py-3 rounded-full flex items-center gap-3 shadow-sm hover:shadow-md transition-all">
+            <img src="https://www.google.com/favicon.ico" class="w-5 h-5">
+            Ingresar con Google
+        </button>
+    </section>
 
-    <main>
-        <section id="city-selector">
-            <h2>¿Dónde te encuentras?</h2>
-            <div class="search-group">
-                <select id="select-provincia">
-                    <option value="">Cargando provincias...</option>
-                </select>
-
-                <select id="select-ciudad" disabled>
-                    <option value="">Selecciona una provincia primero</option>
-                </select>
+    <section id="view-dashboard" class="hidden">
+        <nav class="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-30">
+            <h2 class="font-bold text-xl text-indigo-600">MascotasApp</h2>
+            <div class="flex items-center gap-4">
+                <span id="user-name" class="hidden md:inline text-gray-600 font-medium text-sm"></span>
+                <button onclick="window.logout()" class="text-sm text-red-500 font-bold">Salir</button>
             </div>
-        </section>
+        </nav>
 
-        <section id="actions" class="hidden">
-            <div id="bandeja-entrada" class="hidden">
-                <h3><i class="fas fa-inbox"></i> Mis Mensajes Recibidos</h3>
-                <div id="lista-chats">
-                    <p class="msg">No tienes mensajes nuevos.</p>
+        <main class="p-6 max-w-6xl mx-auto">
+            <div class="bg-white p-4 rounded-2xl shadow-sm mb-8 flex flex-wrap gap-4 items-center border border-gray-100">
+                <div class="flex items-center gap-2 text-indigo-600 font-bold mr-2">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <span>Tu Zona:</span>
                 </div>
-                <hr>
+                <select id="filter-provincia" class="p-2 rounded-xl bg-gray-50 border-none text-sm outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                <select id="filter-ciudad" class="p-2 rounded-xl bg-gray-50 border-none text-sm outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                <button onclick="window.aplicarFiltroZona()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
+                    Cambiar
+                </button>
             </div>
 
-            <button class="btn-primary" id="btn-mostrar-formulario">Reportar Mascota</button>
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-2xl font-bold text-gray-800">Últimos reportes</h3>
+                <button onclick="window.abrirModal()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all">
+                    + Nuevo Reporte
+                </button>
+            </div>
+            <div id="container-publicaciones" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </main>
+    </section>
 
-            <div id="formulario-reporte" class="hidden">
-                <h3>Nuevo Reporte</h3>
-
-                <input type="text" id="nombre-mascota" placeholder="Nombre de la mascota">
-
-                <select id="tipo-mascota">
-                    <option value="Perro">Perro</option>
-                    <option value="Gato">Gato</option>
-                    <option value="Otro">Otro</option>
-                </select>
-
-                <select id="genero-mascota">
-                    <option value="Macho">Macho</option>
-                    <option value="Hembra">Hembra</option>
-                    <option value="Desconocido">No lo sé</option>
-                </select>
-
-                <input type="text" id="barrio-mascota" placeholder="Barrio / Zona">
-
-                <select id="estado-mascota">
-                    <option value="Perdido">Lo perdí</option>
-                    <option value="Encontrado">Lo encontré</option>
-                </select>
-
-                <select id="form-provincia">
-                    <option value="">Selecciona Provincia</option>
-                </select>
-
-                <select id="form-ciudad" disabled>
-                    <option value="">Selecciona una provincia primero</option>
-                </select>
-
-                <input type="text" id="foto-link" placeholder="Link de la foto">
-                
-                <label for="telefono-mascota">WhatsApp de contacto (Opcional):</label>
-                <input type="tel" id="telefono-mascota" placeholder="Ej: +54911...">
-
-                <div class="checkbox-group">
-                    <input type="checkbox" id="permite-chat" checked>
-                    <label for="permite-chat">Permitir que me contacten por el chat de la app</label>
+    <div id="modal-publicar" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">Nuevo Reporte</h2>
+                <button onclick="window.cerrarModal()" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
+            </div>
+            
+            <form id="form-publicar" class="space-y-4">
+                <div class="flex gap-2 p-1 bg-gray-100 rounded-2xl">
+                    <label class="flex-1 text-center py-2 rounded-xl cursor-pointer has-[:checked]:bg-white has-[:checked]:shadow-sm transition-all">
+                        <input type="radio" name="estado" value="Perdido" class="hidden" checked> 
+                        <span class="font-bold text-red-500 text-sm">Perdido</span>
+                    </label>
+                    <label class="flex-1 text-center py-2 rounded-xl cursor-pointer has-[:checked]:bg-white has-[:checked]:shadow-sm transition-all">
+                        <input type="radio" name="estado" value="Encontrado" class="hidden"> 
+                        <span class="font-bold text-green-500 text-sm">Encontrado</span>
+                    </label>
                 </div>
-                
-                <p><small>Al publicar, aceptas que la app es un facilitador y no se responsabiliza por el intercambio de datos entre usuarios.</small></p>
-                
-                <button id="btn-enviar-reporte" class="btn-primary">Publicar ahora</button>
-            </div>
-        </section>
 
-        <section id="feed">
-            <div id="filters" class="hidden">
-                <span>Filtrar por:</span>
-                <button class="btn-filter" data-tipo="Todos">Todos</button>
-                <button class="btn-filter" data-tipo="Perro">Perros</button>
-                <button class="btn-filter" data-tipo="Gato">Gatos</button>
-                <button class="btn-filter" data-tipo="Otro">Otros</button>
-            </div>
-            <div id="lista-mascotas">
-                <p class="msg">Por favor, selecciona provincia y ciudad para ver reportes.</p>
-            </div>
-        </section>
-    </main>
+                <input type="text" id="input-nombre" placeholder="Nombre de la mascota" class="w-full p-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-indigo-500" required>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <select id="select-provincia" class="p-3 rounded-xl border border-gray-200 text-sm"></select>
+                    <select id="select-ciudad" class="p-3 rounded-xl border border-gray-200 text-sm"></select>
+                </div>
 
-    <div id="ventana-chat" class="hidden">
-        <div class="chat-header">
-            <span id="chat-titulo">Chat</span>
-            <button onclick="window.cerrarChat()">×</button>
-        </div>
-        <div id="chat-mensajes"></div>
-        <div class="chat-input">
-            <input type="text" id="input-mensaje" placeholder="Escribe un mensaje...">
-            <button id="btn-enviar-mensaje"><i class="fas fa-paper-plane"></i></button>
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="input-barrio" placeholder="Barrio" class="p-3 rounded-xl border border-gray-200 text-sm">
+                    <input type="tel" id="input-telefono" placeholder="WhatsApp (Ej: 2494...)" class="p-3 rounded-xl border border-gray-200 text-sm">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <select id="select-tipo" class="p-3 rounded-xl border border-gray-200 text-sm">
+                        <option value="Perro">Perro</option>
+                        <option value="Gato">Gato</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                    <select id="select-genero" class="p-3 rounded-xl border border-gray-200 text-sm">
+                        <option value="Macho">Macho</option>
+                        <option value="Hembra">Hembra</option>
+                    </select>
+                </div>
+
+                <div class="border-2 border-dashed border-gray-200 p-4 rounded-2xl bg-gray-50">
+                    <input type="file" id="input-fotos" accept="image/*" multiple class="hidden">
+                    <label for="input-fotos" class="cursor-pointer text-indigo-600 font-bold flex flex-col items-center mb-2">
+                        <i class="fas fa-plus-circle text-2xl mb-1"></i>
+                        <span class="text-sm">Añadir Fotos</span>
+                    </label>
+                    <div id="preview-fotos" class="grid grid-cols-3 gap-2"></div>
+                </div>
+
+                <button type="submit" class="w-full p-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg hover:bg-indigo-700 transition-all">
+                    Publicar Reporte
+                </button>
+            </form>
         </div>
     </div>
-    <div id="modal-editar" class="hidden-overlay">
-    <div class="modal-content">
-        <h3>Editar Publicación</h3>
-        <input type="text" id="edit-nombre">
-        <input type="text" id="edit-barrio">
-        <select id="edit-estado">
-            <option value="Perdido">Perdido</option>
-            <option value="Encontrado">Encontrado</option>
-        </select>
-        <div class="modal-buttons">
-            <button onclick="cerrarModalEdicion()">Cancelar</button>
-            <button id="btn-guardar-cambios" class="btn-primary">Guardar</button>
-        </div>
-    </div>
-</div>
 
-    <script type="module" src="app.js"></script>
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+    <script type="module" src="src/app.js"></script>
 </body>
 </html>
