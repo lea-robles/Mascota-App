@@ -5,6 +5,8 @@ import { GeoService } from './services/geoService.js';
 import { ChatService } from './services/chatService.js';
 import { UI } from './ui/notifications.js';
 import { RenderCards } from './ui/renderCards.js';
+import { CacheManager } from './utils/cacheManager.js';
+import { PerformanceOptimizer } from './utils/performanceOptimizer.js';
 
 // ============================================
 // 🌍 ESTADO GLOBAL LIMPIO
@@ -129,6 +131,23 @@ window.updateLocationState = (provincia, ciudad) => {
   GlobalState.selectedLocation.ciudad = ciudad;
 };
 
+/**
+ * ⚡ Aplica filtro de zona con debounce (debería ser llamado por botón cambiar)
+ * Invalida cache anterior y recarga posts
+ */
+const aplicarFiltroZonaFn = async () => {
+  // Invalidar todos los caches anteriorespara forzar reload
+  CacheManager.invalidateAll();
+  
+  // Recargar dashboard
+  await window.showDashboard();
+  
+  UI.notify("✅ Filtro aplicado", "success");
+};
+
+// ⚡ Crear versión debounceda
+window.aplicarFiltroZona = PerformanceOptimizer.debounce(aplicarFiltroZonaFn, 300);
+
 // ============================================
 // 🧭 FUNCIONES DE NAVEGACIÓN (VISTAS PRINCIPALES)
 // ============================================
@@ -177,14 +196,27 @@ window.showDashboard = async () => {
   try {
     // Obtener ubicación seleccionada
     const provSelect = document.getElementById('filter-provincia');
-    const provincia = provSelect?.options[provSelect.selectedIndex]?.text || GlobalState.selectedLocation.provincia;
+    const provincia =provSelect?.options[provSelect.selectedIndex]?.text || GlobalState.selectedLocation.provincia;
     const ciudad = document.getElementById('filter-ciudad')?.value || GlobalState.selectedLocation.ciudad;
 
     // Actualizar estado
     window.updateLocationState(provincia, ciudad);
 
-    // Cargar publicaciones (pasar userId para validar privacidad)
-    const publicaciones = await PostService.fetchByLocation(provincia, ciudad, GlobalState.currentUser?.id);
+    // ⚡ Cache key: provincia+ciudad
+    const cacheKey = `posts_${provincia}_${ciudad}`;
+    
+    // Intentar obtener del cache primero
+    let publicaciones = CacheManager.get(cacheKey);
+    
+    if (publicaciones) {
+      console.log(`[CACHE HIT] Posts para ${provincia}/${ciudad} cargados del cache`);
+    } else {
+      console.log(`[CACHE MISS] Cargando posts desde Supabase...`);
+      // Cargar desde Supabase y cachear
+      publicaciones = await PostService.fetchByLocation(provincia, ciudad, GlobalState.currentUser?.id);
+      CacheManager.set(cacheKey, publicaciones, 30 * 60 * 1000); // 30 min TTL
+    }
+
     const contenedor = document.getElementById('container-publicaciones');
     
     if (contenedor && GlobalState.currentUser) {
@@ -411,20 +443,26 @@ async function inicializarUbicaciones() {
       if (c) c.innerHTML = opcionesProv;
     });
 
+    // ⚡ Crear función debounceda para cargar ciudades
+    const cargarCiudadesDebounceada = PerformanceOptimizer.debounce(async (provinciaId, index) => {
+      try {
+        const municipios = await GeoService.obtenerMunicipios(provinciaId);
+        const opcionesCiu = municipios
+          .map(m => `<option value="${m.nombre}">${m.nombre}</option>`)
+          .join('');
+        if (combosCiu[index]) {
+          combosCiu[index].innerHTML = opcionesCiu;
+        }
+      } catch (error) {
+        console.error('Error al cargar ciudades:', error);
+      }
+    }, 300); // 300ms delay
+
     // Evento para cargar ciudades dinámicamente
     combosProv.forEach((c, index) => {
-      c?.addEventListener('change', async (e) => {
-        try {
-          const municipios = await GeoService.obtenerMunicipios(e.target.value);
-          const opcionesCiu = municipios
-            .map(m => `<option value="${m.nombre}">${m.nombre}</option>`)
-            .join('');
-          if (combosCiu[index]) {
-            combosCiu[index].innerHTML = opcionesCiu;
-          }
-        } catch (error) {
-          console.error('Error al cargar ciudades:', error);
-        }
+      c?.addEventListener('change', (e) => {
+        // Usar debounce para evitar múltiples requests
+        cargarCiudadesDebounceada(e.target.value, index);
       });
       c?.dispatchEvent(new Event('change'));
     });
