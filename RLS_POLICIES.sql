@@ -1,74 +1,23 @@
 -- ============================================================================
 -- MASCOTA APP - ROW LEVEL SECURITY (RLS) POLICIES
--- Proyecto: Mensajería segura + Posts con privacidad
+-- Proyecto: Protege publicaciones + mensajes
 -- Fecha: 31/03/2026
+-- Adaptado a tu esquema real: publicaciones + mensajes
 -- ============================================================================
 
 -- ============================================================================
--- 1. FUNCIÓN HELPER: Verificar si usuario es ADMIN
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION is_admin(user_id uuid)
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM auth.users 
-    WHERE id = user_id AND raw_user_meta_data ? 'role' 
-    AND raw_user_meta_data->>'role' = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ============================================================================
--- 2. TABLA: messages (Proteger conversaciones privadas)
--- ============================================================================
-
--- Habilitar RLS
-ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-
--- POLÍTICA SELECT: Solo sender/receiver/admin pueden ver mensajes
-CREATE POLICY messages_select_policy ON messages
-  FOR SELECT
-  USING (
-    auth.uid() = sender_id 
-    OR auth.uid() = receiver_id 
-    OR is_admin(auth.uid())
-  );
-
--- POLÍTICA INSERT: Solo el sender puede insertar mensajes
-CREATE POLICY messages_insert_policy ON messages
-  FOR INSERT
-  WITH CHECK (
-    auth.uid() = sender_id
-  );
-
--- POLÍTICA UPDATE: Solo el sender puede marcar como leído (read status)
-CREATE POLICY messages_update_policy ON messages
-  FOR UPDATE
-  USING (
-    auth.uid() = sender_id
-  );
-
--- POLÍTICA DELETE: Admin puede borrar si es necesario (auditoría)
-CREATE POLICY messages_delete_policy ON messages
-  FOR DELETE
-  USING (
-    is_admin(auth.uid())
-  );
-
--- ============================================================================
--- 3. TABLA: publicaciones (Privacidad según autenticación)
+-- TABLA 1: publicaciones (Privacidad según autenticación)
 -- ============================================================================
 
 -- Habilitar RLS
 ALTER TABLE publicaciones ENABLE ROW LEVEL SECURITY;
 
--- POLÍTICA SELECT: Autenticados ven TODO, No autenticados ven solo campos públicos
--- ⚠️ NOTA: RLS a nivel de fila permite ver las filas. El filtrado de CAMPOS
--- se hace en postService.js (_filterByPrivacy) y en app.js
+-- POLÍTICA SELECT: Solo mostrar posts activos
+-- ⚠️ NOTA: RLS a nivel de fila. El filtrado de campos sensibles
+-- (teléfono, dirección) se hace en postService.js (_filterByPrivacy)
 CREATE POLICY publicaciones_select_policy ON publicaciones
   FOR SELECT
-  USING (activa = true);  -- Solo mostrar posts activos
+  USING (activa = true);
 
 -- POLÍTICA INSERT: Solo usuarios autenticados pueden crear posts
 CREATE POLICY publicaciones_insert_policy ON publicaciones
@@ -92,39 +41,36 @@ CREATE POLICY publicaciones_delete_policy ON publicaciones
   );
 
 -- ============================================================================
--- 4. TABLA: conversations (Proteger listado de conversaciones)
+-- TABLA 2: mensajes (Proteger conversaciones privadas)
 -- ============================================================================
 
 -- Habilitar RLS
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mensajes ENABLE ROW LEVEL SECURITY;
 
--- POLÍTICA SELECT: Solo los dos usuarios en la conversación + admin
-CREATE POLICY conversations_select_policy ON conversations
+-- POLÍTICA SELECT: Solo emisor/receptor pueden ver mensajes
+CREATE POLICY mensajes_select_policy ON mensajes
   FOR SELECT
   USING (
-    auth.uid() = user1_id 
-    OR auth.uid() = user2_id 
-    OR is_admin(auth.uid())
+    auth.jwt()->>'email' = emisor 
+    OR auth.jwt()->>'email' = receptor
   );
 
--- POLÍTICA INSERT: Solo usuarios autenticados pueden iniciar conversaciones
-CREATE POLICY conversations_insert_policy ON conversations
+-- POLÍTICA INSERT: Solo el emisor puede insertar mensajes
+CREATE POLICY mensajes_insert_policy ON mensajes
   FOR INSERT
   WITH CHECK (
-    auth.uid() = user1_id 
-    OR auth.uid() = user2_id
+    auth.jwt()->>'email' = emisor
   );
 
--- POLÍTICA UPDATE: Solo los participantes pueden actualizar (ej: ocultar conversación)
-CREATE POLICY conversations_update_policy ON conversations
+-- POLÍTICA UPDATE: Solo emisor puede marcar como leído
+CREATE POLICY mensajes_update_policy ON mensajes
   FOR UPDATE
   USING (
-    auth.uid() = user1_id 
-    OR auth.uid() = user2_id
+    auth.jwt()->>'email' = emisor
   );
 
--- POLÍTICA DELETE: Prohibir eliminación (conservar por auditoría)
-CREATE POLICY conversations_delete_policy ON conversations
+-- POLÍTICA DELETE: Nadie puede borrar (conservar auditoría)
+CREATE POLICY mensajes_delete_policy ON mensajes
   FOR DELETE
   USING (false);
 
@@ -132,10 +78,48 @@ CREATE POLICY conversations_delete_policy ON conversations
 -- VALIDACIÓN - Verificar que RLS está habilitado
 -- ============================================================================
 
--- Ejecuta esto para confirmar después de aplicar:
--- SELECT tablename, rowlevelSecurity FROM pg_tables 
+-- Ejecuta DESPUÉS de aplicar este script para confirmar:
+-- SELECT tablename FROM pg_tables 
 -- WHERE schemaname = 'public' 
--- AND tablename IN ('messages', 'publicaciones', 'conversations');
+-- AND tablename IN ('publicaciones', 'mensajes');
+
+-- Para ver las políticas creadas:
+-- SELECT policyname, tablename FROM pg_policies 
+-- WHERE tablename IN ('publicaciones', 'mensajes');
+
+-- ============================================================================
+-- INSTRUCCIONES PARA EJECUTAR EN SUPABASE
+-- ============================================================================
+
+/*
+
+## CÓMO EJECUTAR EN SUPABASE DASHBOARD:
+
+1. Abre tu proyecto Supabase: https://supabase.com/dashboard
+2. Ve a SQL Editor (engranaje + código en panel izquierdo)
+3. Click en "New Query"
+4. Copia ESTE archivo completo
+5. Pega en el editor
+6. Click en el botón azul "Run" (o Ctrl+Enter)
+7. Espera a que termine (5-15 segundos)
+
+## RESULTADO ESPERADO:
+
+✅ "Queries completed successfully"
+
+## VALIDACIÓN:
+
+Después, ejecuta esta query para confirmar que RLS está activo:
+
+  SELECT tablename, rowsecurity 
+  FROM pg_class 
+  JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace 
+  WHERE pg_namespace.nspname = 'public' 
+  AND tablename IN ('publicaciones', 'mensajes');
+
+✅ Debe mostrar rowsecurity = true para ambas tablas
+
+*/
 
 -- ============================================================================
 -- INSTRUCCIONES PARA EJECUTAR
