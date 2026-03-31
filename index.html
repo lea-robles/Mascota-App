@@ -113,6 +113,50 @@
         </div>
     </div>
 
+    <!-- MODAL DE TÉRMINOS Y CONDICIONES -->
+    <div id="termsModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Términos y Condiciones</h2>
+                <p class="text-sm text-gray-500">Por favor, lee y acepta nuestros términos</p>
+            </div>
+
+            <div class="bg-gray-50 p-5 rounded-2xl mb-6 max-h-64 overflow-y-auto border border-gray-200">
+                <h3 class="font-bold text-gray-800 mb-3 text-sm">Términos y Condiciones Aceptados</h3>
+                <p class="text-gray-700 text-sm mb-4 leading-relaxed">
+                    Al utilizar MascotasApp, aceptas nuestros términos de servicio y políticas de privacidad. Nos comprometemos a proteger tus datos personales conforme a la legislación vigente.
+                </p>
+
+                <h3 class="font-bold text-gray-800 mb-3 text-sm">Cláusula de Retención</h3>
+                <p class="text-gray-700 text-sm leading-relaxed">
+                    Tus conversaciones y reportes se guardan permanentemente por auditoría y seguridad. Esto nos permite:
+                </p>
+                <ul class="text-gray-700 text-sm mt-2 ml-4 list-disc space-y-1">
+                    <li>Mantener un historial seguro de todas las mascotas reportadas</li>
+                    <li>Prevenir fraudes y usos indebidos de la plataforma</li>
+                    <li>Mejorar la calidad de nuestros servicios</li>
+                    <li>Cumplir con obligaciones legales de retención de datos</li>
+                </ul>
+            </div>
+
+            <label class="flex items-start gap-3 mb-6 cursor-pointer group">
+                <input type="checkbox" id="termsCheckbox" class="w-5 h-5 mt-1 cursor-pointer accent-green-500">
+                <span class="text-sm text-gray-700 group-hover:text-gray-900">
+                    Acepto los <strong>Términos y Condiciones</strong> y la <strong>Cláusula de Retención</strong>
+                </span>
+            </label>
+
+            <div class="flex gap-3">
+                <button id="rejectTermsBtn" class="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-all">
+                    Rechazar
+                </button>
+                <button id="acceptTermsBtn" class="flex-1 px-4 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
     <script type="module" src="src/app.js"></script>
 </body>

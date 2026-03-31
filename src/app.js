@@ -2,161 +2,565 @@ import { AuthService } from './services/authService.js';
 import { PostService } from './services/postService.js';
 import { UploadService } from './services/uploadService.js';
 import { GeoService } from './services/geoService.js';
+import { ChatService } from './services/chatService.js';
 import { UI } from './ui/notifications.js';
 import { RenderCards } from './ui/renderCards.js';
 
-let currentUser = null;
-let archivosTemporales = []; // Para manejar múltiples fotos y eliminarlas antes de subir
+// ============================================
+// 🌍 ESTADO GLOBAL LIMPIO
+// ============================================
 
-// --- ACCIONES GLOBALES ---
+const GlobalState = {
+  currentUser: null,
+  selectedLocation: {
+    provincia: null,
+    ciudad: null
+  },
+  activeConversation: null,
+  archivosTemporales: []
+};
+
+// ============================================
+// 🔐 VALIDACIÓN DE ENTRADA
+// ============================================
+
+const ValidationRules = {
+  // Email: RFC 5322 simplificado
+  email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  
+  // Teléfono: Argentina +54 con 9-10 dígitos
+  phone: /^\+?54\d{9,10}$/,
+  
+  // Dirección: mínimo 10 caracteres
+  address: {
+    minLength: 10,
+    test: (value) => value && value.trim().length >= 10
+  },
+  
+  // Nombre: mínimo 3 caracteres
+  name: {
+    minLength: 3,
+    test: (value) => value && value.trim().length >= 3
+  }
+};
+
+/**
+ * Valida un campo de formulario según su tipo
+ * @param {string} value - Valor a validar
+ * @param {string} fieldType - Tipo: 'email', 'phone', 'address', 'name'
+ * @returns {object} { valid: boolean, message: string }
+ */
+window.validateFormField = (value, fieldType) => {
+  if (!value || value.trim() === '') {
+    return { valid: false, message: 'Este campo es requerido' };
+  }
+
+  switch (fieldType) {
+    case 'email':
+      if (!ValidationRules.email.test(value)) {
+        return { valid: false, message: 'Email inválido' };
+      }
+      return { valid: true, message: '' };
+
+    case 'phone':
+      if (!ValidationRules.phone.test(value.replace(/\s/g, ''))) {
+        return {
+          valid: false,
+          message: 'Teléfono inválido. Usa formato: +54 seguido de 9-10 dígitos'
+        };
+      }
+      return { valid: true, message: '' };
+
+    case 'address':
+      if (!ValidationRules.address.test(value)) {
+        return {
+          valid: false,
+          message: `La dirección debe tener al menos ${ValidationRules.address.minLength} caracteres`
+        };
+      }
+      return { valid: true, message: '' };
+
+    case 'name':
+      if (!ValidationRules.name.test(value)) {
+        return {
+          valid: false,
+          message: `El nombre debe tener al menos ${ValidationRules.name.minLength} caracteres`
+        };
+      }
+      return { valid: true, message: '' };
+
+    default:
+      return { valid: true, message: '' };
+  }
+};
+
+/**
+ * Valida un formulario completo antes de enviarlo
+ * @param {object} fields - { email: '', phone: '', address: '', ...}
+ * @returns {boolean} True si todo es válido
+ */
+const validateForm = (fields) => {
+  const validations = [];
+  
+  for (const [fieldName, value] of Object.entries(fields)) {
+    const result = window.validateFormField(value, fieldName);
+    if (!result.valid) {
+      validations.push(result.message);
+    }
+  }
+
+  if (validations.length > 0) {
+    validations.forEach(msg => UI.notify(msg, "error"));
+    return false;
+  }
+
+  return true;
+};
+
+// ============================================
+// 🗺️ ACTUALIZAR ESTADO DE UBICACIÓN
+// ============================================
+
+/**
+ * Actualiza la ubicación seleccionada en el estado global
+ */
+window.updateLocationState = (provincia, ciudad) => {
+  GlobalState.selectedLocation.provincia = provincia;
+  GlobalState.selectedLocation.ciudad = ciudad;
+};
+
+// ============================================
+// 🧭 FUNCIONES DE NAVEGACIÓN (VISTAS PRINCIPALES)
+// ============================================
+
+/**
+ * Muestra la vista de Bienvenida (Login/Signup)
+ */
+window.showHome = () => {
+  const viewWelcome = document.getElementById('view-welcome');
+  const viewDashboard = document.getElementById('view-dashboard');
+  const viewChat = document.getElementById('view-chat');
+  const viewPostDetail = document.getElementById('view-post-detail');
+  const viewInbox = document.getElementById('view-inbox');
+
+  viewWelcome?.classList.remove('hidden');
+  viewDashboard?.classList.add('hidden');
+  viewChat?.classList.add('hidden');
+  viewPostDetail?.classList.add('hidden');
+  viewInbox?.classList.add('hidden');
+
+  GlobalState.activeConversation = null;
+};
+
+/**
+ * Muestra el Dashboard (Feed de posts según ubicación seleccionada)
+ */
+window.showDashboard = async () => {
+  const viewWelcome = document.getElementById('view-welcome');
+  const viewDashboard = document.getElementById('view-dashboard');
+  const viewChat = document.getElementById('view-chat');
+  const viewPostDetail = document.getElementById('view-post-detail');
+  const viewInbox = document.getElementById('view-inbox');
+
+  viewWelcome?.classList.add('hidden');
+  viewDashboard?.classList.remove('hidden');
+  viewChat?.classList.add('hidden');
+  viewPostDetail?.classList.add('hidden');
+  viewInbox?.classList.add('hidden');
+
+  // Mostrar nombre del usuario
+  const labelNombre = document.getElementById('user-name');
+  if (labelNombre && GlobalState.currentUser) {
+    labelNombre.innerText = GlobalState.currentUser.user_metadata?.full_name || 'Usuario';
+  }
+
+  try {
+    // Obtener ubicación seleccionada
+    const provSelect = document.getElementById('filter-provincia');
+    const provincia = provSelect?.options[provSelect.selectedIndex]?.text || GlobalState.selectedLocation.provincia;
+    const ciudad = document.getElementById('filter-ciudad')?.value || GlobalState.selectedLocation.ciudad;
+
+    // Actualizar estado
+    window.updateLocationState(provincia, ciudad);
+
+    // Cargar publicaciones
+    const publicaciones = await PostService.fetchByLocation(provincia, ciudad);
+    const contenedor = document.getElementById('container-publicaciones');
+    
+    if (contenedor && GlobalState.currentUser) {
+      RenderCards.draw(contenedor, publicaciones, GlobalState.currentUser.email);
+    }
+  } catch (error) {
+    console.error('Error al cargar dashboard:', error);
+    UI.notify("Error al cargar las publicaciones", "error");
+  }
+};
+
+/**
+ * Muestra el detalle de una conversación de chat
+ * @param {string} conversationId - ID de la conversación
+ */
+window.showChat = (conversationId) => {
+  const viewWelcome = document.getElementById('view-welcome');
+  const viewDashboard = document.getElementById('view-dashboard');
+  const viewChat = document.getElementById('view-chat');
+  const viewPostDetail = document.getElementById('view-post-detail');
+  const viewInbox = document.getElementById('view-inbox');
+
+  viewWelcome?.classList.add('hidden');
+  viewDashboard?.classList.add('hidden');
+  viewChat?.classList.remove('hidden');
+  viewPostDetail?.classList.add('hidden');
+  viewInbox?.classList.add('hidden');
+
+  GlobalState.activeConversation = conversationId;
+
+  // Aquí se cargaría el historial del chat (FASE 1a)
+  console.log(`Cargando chat: ${conversationId}`);
+};
+
+/**
+ * Muestra el detalle de una publicación específica
+ * @param {string} postId - ID de la publicación
+ */
+window.showPostDetail = (postId) => {
+  const viewWelcome = document.getElementById('view-welcome');
+  const viewDashboard = document.getElementById('view-dashboard');
+  const viewChat = document.getElementById('view-chat');
+  const viewPostDetail = document.getElementById('view-post-detail');
+  const viewInbox = document.getElementById('view-inbox');
+
+  viewWelcome?.classList.add('hidden');
+  viewDashboard?.classList.add('hidden');
+  viewChat?.classList.add('hidden');
+  viewPostDetail?.classList.remove('hidden');
+  viewInbox?.classList.add('hidden');
+
+  // Aquí se cargarían los detalles del post (autor, ubicación, botón contactar)
+  console.log(`Cargando detalle de post: ${postId}`);
+};
+
+/**
+ * Muestra la Bandeja de Entrada (lista de conversaciones activas)
+ */
+window.showInbox = () => {
+  const viewWelcome = document.getElementById('view-welcome');
+  const viewDashboard = document.getElementById('view-dashboard');
+  const viewChat = document.getElementById('view-chat');
+  const viewPostDetail = document.getElementById('view-post-detail');
+  const viewInbox = document.getElementById('view-inbox');
+
+  viewWelcome?.classList.add('hidden');
+  viewDashboard?.classList.add('hidden');
+  viewChat?.classList.add('hidden');
+  viewPostDetail?.classList.add('hidden');
+  viewInbox?.classList.remove('hidden');
+
+  GlobalState.activeConversation = null;
+
+  // Aquí se cargaría la lista de conversaciones
+  console.log('Cargando bandeja de entrada');
+};
+
+// ============================================
+// 📤 FUNCIÓN CRÍTICA: ELIMINAR PUBLICACIÓN
+// ============================================
+
+/**
+ * Elimina una publicación (soft delete)
+ * @param {string} postId - ID de la publicación a eliminar
+ */
+window.eliminarPublicacion = async (postId) => {
+  if (!confirm('¿Estás seguro de que deseas eliminar esta publicación?')) {
+    return;
+  }
+
+  try {
+    UI.showLoading(true);
+    
+    // Usar softDelete de PostService
+    await PostService.softDelete(postId);
+    
+    UI.notify("✅ Publicación eliminada correctamente", "success");
+    
+    // Refrescar el feed
+    setTimeout(() => window.showDashboard(), 500);
+  } catch (error) {
+    console.error('Error al eliminar publicación:', error);
+    UI.notify("❌ Error al eliminar la publicación. Intenta nuevamente.", "error");
+  } finally {
+    UI.showLoading(false);
+  }
+};
+
+// ============================================
+// 🔐 AUTENTICACIÓN
+// ============================================
+
 window.loginConGoogle = async () => {
-    try { await AuthService.signInWithGoogle(); } catch (e) { UI.notify("Error al iniciar sesión", "error"); }
+  try {
+    UI.showLoading(true);
+    await AuthService.signInWithGoogle();
+    GlobalState.currentUser = await AuthService.getCurrentUser();
+    if (GlobalState.currentUser) {
+      await inicializarUbicaciones();
+      window.showDashboard();
+    }
+  } catch (error) {
+    console.error('Error al iniciar sesión:', error);
+    UI.notify("Error al iniciar sesión con Google", "error");
+  } finally {
+    UI.showLoading(false);
+  }
 };
 
 window.logout = async () => {
+  try {
     await AuthService.signOut();
+    GlobalState.currentUser = null;
+    GlobalState.activeConversation = null;
     window.location.reload();
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error);
+    UI.notify("Error al cerrar sesión", "error");
+  }
 };
 
-window.abrirModal = () => document.getElementById('modal-publicar')?.classList.remove('hidden');
+// ============================================
+// 📝 GESTIÓN DEL MODAL DE PUBLICACIÓN
+// ============================================
+
+window.abrirModal = () => {
+  document.getElementById('modal-publicar')?.classList.remove('hidden');
+};
 
 window.cerrarModal = () => {
-    document.getElementById('modal-publicar')?.classList.add('hidden');
-    document.getElementById('form-publicar')?.reset();
-    archivosTemporales = [];
-    actualizarVistaPrevia();
+  document.getElementById('modal-publicar')?.classList.add('hidden');
+  document.getElementById('form-publicar')?.reset();
+  GlobalState.archivosTemporales = [];
+  actualizarVistaPrevia();
 };
 
-// --- FILTROS DE ZONA GLOBAL ---
-window.aplicarFiltroZona = () => mostrarDashboard();
+/**
+ * Agrega fotos temporales y actualiza la vista previa
+ */
+document.getElementById('input-fotos')?.addEventListener('change', (e) => {
+  const nuevosFiles = Array.from(e.target.files);
+  GlobalState.archivosTemporales = [
+    ...GlobalState.archivosTemporales,
+    ...nuevosFiles
+  ];
+  actualizarVistaPrevia();
+});
+
+/**
+ * Actualiza la vista previa de fotos en el formulario
+ */
+function actualizarVistaPrevia() {
+  const preview = document.getElementById('preview-fotos');
+  if (!preview) return;
+
+  preview.innerHTML = '';
+
+  GlobalState.archivosTemporales.forEach((file, index) => {
+    const url = URL.createObjectURL(file);
+    const div = document.createElement('div');
+    div.className = "relative group h-20";
+    div.innerHTML = `
+      <img src="${url}" class="w-full h-full object-cover rounded-xl border">
+      <button type="button" onclick="window.quitarFoto(${index})" 
+              class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center shadow-md hover:bg-red-600 transition-colors">
+        &times;
+      </button>
+    `;
+    preview.appendChild(div);
+  });
+}
+
+/**
+ * Remueve una foto de la lista temporal
+ */
+window.quitarFoto = (index) => {
+  GlobalState.archivosTemporales.splice(index, 1);
+  actualizarVistaPrevia();
+};
+
+// ============================================
+// 🌍 INICIALIZACIÓN DE UBICACIONES
+// ============================================
 
 async function inicializarUbicaciones() {
-    try {
-        const provincias = await GeoService.obtenerProvincias();
-        // Llenar selectores (del filtro y del modal)
-        const combosProv = [document.getElementById('filter-provincia'), document.getElementById('select-provincia')];
-        const combosCiu = [document.getElementById('filter-ciudad'), document.getElementById('select-ciudad')];
-
-        const opcionesProv = provincias.map(p => `<option value="${p.id}">${p.nombre}</option>`).join('');
-        combosProv.forEach(c => { if(c) c.innerHTML = opcionesProv; });
-
-        // Evento para cargar ciudades dinámicamente
-        combosProv.forEach((c, index) => {
-            c.addEventListener('change', async (e) => {
-                const municipios = await GeoService.obtenerMunicipios(e.target.value);
-                const opcionesCiu = municipios.map(m => `<option value="${m.nombre}">${m.nombre}</option>`).join('');
-                if(combosCiu[index]) combosCiu[index].innerHTML = opcionesCiu;
-            });
-            c.dispatchEvent(new Event('change'));
-        });
-    } catch (e) { console.error("GeoError:", e); }
-}
-
-// --- GESTIÓN DE FOTOS ---
-document.getElementById('input-fotos')?.addEventListener('change', (e) => {
-    const nuevosFiles = Array.from(e.target.files);
-    archivosTemporales = [...archivosTemporales, ...nuevosFiles];
-    actualizarVistaPrevia();
-});
-
-function actualizarVistaPrevia() {
-    const preview = document.getElementById('preview-fotos');
-    if (!preview) return;
-    preview.innerHTML = '';
+  try {
+    const provincias = await GeoService.obtenerProvincias();
     
-    archivosTemporales.forEach((file, index) => {
-        const url = URL.createObjectURL(file);
-        const div = document.createElement('div');
-        div.className = "relative group h-20";
-        div.innerHTML = `
-            <img src="${url}" class="w-full h-full object-cover rounded-xl border">
-            <button type="button" onclick="window.quitarFoto(${index})" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center shadow-md hover:bg-red-600 transition-colors">
-                &times;
-            </button>
-        `;
-        preview.appendChild(div);
+    // Llenar selectores
+    const combosProv = [
+      document.getElementById('filter-provincia'),
+      document.getElementById('select-provincia')
+    ];
+    const combosCiu = [
+      document.getElementById('filter-ciudad'),
+      document.getElementById('select-ciudad')
+    ];
+
+    const opcionesProv = provincias
+      .map(p => `<option value="${p.id}">${p.nombre}</option>`)
+      .join('');
+
+    combosProv.forEach(c => {
+      if (c) c.innerHTML = opcionesProv;
     });
+
+    // Evento para cargar ciudades dinámicamente
+    combosProv.forEach((c, index) => {
+      c?.addEventListener('change', async (e) => {
+        try {
+          const municipios = await GeoService.obtenerMunicipios(e.target.value);
+          const opcionesCiu = municipios
+            .map(m => `<option value="${m.nombre}">${m.nombre}</option>`)
+            .join('');
+          if (combosCiu[index]) {
+            combosCiu[index].innerHTML = opcionesCiu;
+          }
+        } catch (error) {
+          console.error('Error al cargar ciudades:', error);
+        }
+      });
+      c?.dispatchEvent(new Event('change'));
+    });
+  } catch (error) {
+    console.error('Error al inicializar ubicaciones:', error);
+  }
 }
 
-window.quitarFoto = (index) => {
-    archivosTemporales.splice(index, 1);
-    actualizarVistaPrevia();
-};
+// ============================================
+// 📋 ENVÍO DE PUBLICACIÓN (REPORTE)
+// ============================================
 
-// --- INICIO DE LA APP ---
-document.addEventListener('DOMContentLoaded', async () => {
+document.getElementById('form-publicar')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  // Validar que haya fotos
+  if (GlobalState.archivosTemporales.length === 0) {
+    return UI.notify("⚠️ Debes añadir al menos una foto", "error");
+  }
+
+  // Recopilar datos del formulario
+  const nombre = document.getElementById('input-nombre')?.value || '';
+  const telefono = document.getElementById('input-telefono')?.value || '';
+  const barrio = document.getElementById('input-barrio')?.value || '';
+
+  // Validar campos críticos
+  const fieldsToValidate = {
+    name: nombre,
+    phone: telefono,
+    address: barrio
+  };
+
+  if (!validateForm(fieldsToValidate)) {
+    return; // Las validaciones mostran mensajes de error
+  }
+
+  try {
     UI.showLoading(true);
-    try {
-        currentUser = await AuthService.getCurrentUser();
-        if (currentUser) {
-            await inicializarUbicaciones();
-            mostrarDashboard();
-        } else {
-            mostrarBienvenida();
-        }
-    } catch (error) { console.error(error); } 
-    finally { UI.showLoading(false); }
+    UI.notify("📤 Procesando publicación...");
+
+    // Subir imágenes
+    const urls = await UploadService.uploadImages(GlobalState.archivosTemporales);
+
+    // Preparar datos de la publicación
+    const provSelect = document.getElementById('select-provincia');
+    const nuevaMascota = {
+      nombre: nombre,
+      tipo: document.getElementById('select-tipo')?.value || '',
+      genero: document.getElementById('select-genero')?.value || '',
+      provincia: provSelect?.options[provSelect.selectedIndex]?.text || '',
+      ciudad: document.getElementById('select-ciudad')?.value || '',
+      barrio: barrio || "Sin especificar",
+      foto: urls,
+      estado: document.querySelector('input[name="estado"]:checked')?.value || 'perdido',
+      autor_email: GlobalState.currentUser?.email || '',
+      activa: true,
+      permite_chat: true,
+      telefono: telefono
+    };
+
+    // Crear publicación
+    const { error } = await PostService.create(nuevaMascota);
+    if (error) throw error;
+
+    UI.notify("✅ ¡Mascota reportada con éxito!", "success");
+    window.cerrarModal();
+    
+    // Refrescar feed
+    setTimeout(() => window.showDashboard(), 500);
+  } catch (error) {
+    console.error('Error al publicar:', error);
+    UI.notify("❌ Error al publicar. Intenta nuevamente.", "error");
+  } finally {
+    UI.showLoading(false);
+  }
 });
 
-function mostrarBienvenida() {
-    document.getElementById('view-welcome')?.classList.remove('hidden');
-    document.getElementById('view-dashboard')?.classList.add('hidden');
+// ============================================
+// 🎯 GESTIÓN DE MODAL DE TÉRMINOS
+// ============================================
+
+let termsAccepted = false;
+
+function inicializarModalTerminos() {
+  const checkbox = document.getElementById('termsCheckbox');
+  const acceptBtn = document.getElementById('acceptTermsBtn');
+  const rejectBtn = document.getElementById('rejectTermsBtn');
+
+  // Habilitar botón de aceptar solo si checkbox está marcado
+  checkbox?.addEventListener('change', (e) => {
+    acceptBtn.disabled = !e.target.checked;
+  });
+
+  // Aceptar términos
+  acceptBtn?.addEventListener('click', () => {
+    termsAccepted = true;
+    cerrarModalTerminos();
+  });
+
+  // Rechazar términos
+  rejectBtn?.addEventListener('click', () => {
+    termsAccepted = false;
+    cerrarModalTerminos();
+    checkbox.checked = false;
+    UI.notify("Debes aceptar los términos para continuar", "error");
+  });
 }
 
-async function mostrarDashboard() {
-    document.getElementById('view-welcome')?.classList.add('hidden');
-    document.getElementById('view-dashboard')?.classList.remove('hidden');
-    
-    const labelNombre = document.getElementById('user-name');
-    if (labelNombre) labelNombre.innerText = currentUser.user_metadata.full_name;
-
-    try {
-        const provSelect = document.getElementById('filter-provincia');
-        const provincia = provSelect.options[provSelect.selectedIndex].text;
-        const ciudad = document.getElementById('filter-ciudad').value;
-
-        const publicaciones = await PostService.fetchByLocation(provincia, ciudad);
-        const contenedor = document.getElementById('container-publicaciones');
-        if (contenedor) RenderCards.draw(contenedor, publicaciones, currentUser.email);
-    } catch (e) { UI.notify("Error al cargar datos", "error"); }
+function mostrarModalTerminos() {
+  document.getElementById('termsModal')?.classList.remove('hidden');
 }
 
-// --- ENVÍO DE REPORTE ---
-document.getElementById('form-publicar')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (archivosTemporales.length === 0) return UI.notify("Añade al menos una foto", "error");
+function cerrarModalTerminos() {
+  document.getElementById('termsModal')?.classList.add('hidden');
+  document.getElementById('termsCheckbox').checked = false;
+  document.getElementById('acceptTermsBtn').disabled = true;
+}
 
-    try {
-        UI.showLoading(true);
-        UI.notify("Procesando reporte...");
+// ============================================
+// 🚀 INICIO DE LA APP
+// ============================================
 
-        const urls = await UploadService.uploadImages(archivosTemporales);
-        
-        const provSelect = document.getElementById('select-provincia');
-        const nuevaMascota = {
-            nombre: document.getElementById('input-nombre').value,
-            tipo: document.getElementById('select-tipo').value,
-            genero: document.getElementById('select-genero').value,
-            provincia: provSelect.options[provSelect.selectedIndex].text,
-            ciudad: document.getElementById('select-ciudad').value,
-            barrio: document.getElementById('input-barrio').value || "Sin especificar",
-            foto: urls,
-            estado: document.querySelector('input[name="estado"]:checked').value,
-            autor_email: currentUser.email,
-            activa: true,
-            permite_chat: true,
-            telefono: document.getElementById('input-telefono').value || ""
-        };
-
-        const { error } = await PostService.create(nuevaMascota);
-        if (error) throw error;
-
-        UI.notify("¡Mascota reportada con éxito!", "success");
-        cerrarModal();
-        setTimeout(() => mostrarDashboard(), 500);
-    } catch (error) {
-        UI.notify("Error al publicar", "error");
-    } finally {
-        UI.showLoading(false);
+document.addEventListener('DOMContentLoaded', async () => {
+  UI.showLoading(true);
+  try {
+    GlobalState.currentUser = await AuthService.getCurrentUser();
+    if (GlobalState.currentUser) {
+      await inicializarUbicaciones();
+      window.showDashboard();
+    } else {
+      window.showHome();
     }
+  } catch (error) {
+    console.error('Error al inicializar app:', error);
+  } finally {
+    UI.showLoading(false);
+    inicializarModalTerminos();
+  }
 });
