@@ -1,30 +1,63 @@
 import { supabase } from '../api/supabaseClient.js';
+import { ErrorHandler } from '../utils/errorHandler.js';
 
 export const ChatService = {
     async sendMessage(emisor, receptor, contenido, publicacionId) {
-        // Práctica de Seguridad: Validación básica antes de enviar
-        if (!contenido.trim()) return;
+        try {
+            if (!emisor || !receptor) {
+                const err = new Error('Emisor y receptor son requeridos');
+                err.status = 400;
+                throw err;
+            }
 
-        const { error } = await supabase.from('mensajes').insert([{ 
-            emisor, 
-            receptor, 
-            contenido: contenido.trim(), 
-            publicacion_id: publicacionId,
-            leido: false
-        }]);
+            if (!contenido || !contenido.trim()) {
+                const err = new Error('El mensaje no puede estar vacío');
+                err.status = 400;
+                throw err;
+            }
 
-        if (error) throw error;
+            const { error } = await supabase.from('mensajes').insert([{ 
+                emisor, 
+                receptor, 
+                contenido: contenido.trim(), 
+                publicacion_id: publicacionId,
+                leido: false
+            }]);
+
+            if (error) throw error;
+        } catch (error) {
+            throw ErrorHandler.handle(error, 'ChatService.sendMessage');
+        }
     },
 
-    // Suscripción Realtime (Mejorada)
+    /**
+     * Suscripción Realtime a nuevos mensajes
+     * @param {string} publicacionId - ID de la publicación asociada
+     * @param {Function} callback - Callback cuando llega nuevo mensaje
+     * @returns {Object} Subscription object para unsubscribirse later
+     */
     subscribeToMessages(publicacionId, callback) {
-        return supabase
-            .channel('chat-publico')
-            .on('postgres_changes', 
-                { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `publicacion_id=eq.${publicacionId}` },
-                (payload) => callback(payload.new)
-            )
-            .subscribe();
+        try {
+            if (!publicacionId) {
+                const err = new Error('publicacionId es requerido');
+                err.status = 400;
+                throw err;
+            }
+
+            return supabase
+                .channel('chat-publico')
+                .on('postgres_changes', 
+                    { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `publicacion_id=eq.${publicacionId}` },
+                    (payload) => callback(payload.new)
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log(`[ChatService] Suscrito a chat para post ${publicacionId}`);
+                    }
+                });
+        } catch (error) {
+            throw ErrorHandler.handle(error, 'ChatService.subscribeToMessages');
+        }
     },
 
     /**
@@ -34,6 +67,12 @@ export const ChatService = {
      */
     async getMessageHistory(conversationId) {
         try {
+            if (!conversationId) {
+                const err = new Error('conversationId es requerido');
+                err.status = 400;
+                throw err;
+            }
+
             const { data, error } = await supabase
                 .from('messages')
                 .select('id, sender_id, receiver_id, message, created_at, read')
@@ -43,8 +82,7 @@ export const ChatService = {
             if (error) throw error;
             return data || [];
         } catch (error) {
-            console.error('Error fetching message history:', error);
-            throw error;
+            throw ErrorHandler.handle(error, 'ChatService.getMessageHistory');
         }
     },
 
@@ -72,23 +110,29 @@ export const ChatService = {
                 updated_count: data?.length || 0
             };
         } catch (error) {
-            console.error('Error marking messages as read:', error);
-            throw error;
+            throw ErrorHandler.handle(error, 'ChatService.markAsRead');
         }
     },
 
     /**
      * Crea o retorna una conversación existente entre dos usuarios
-     * Evita crear duplicados
+     * Evita crear duplicados ordenando IDs
      * @param {string} userId1 - ID del primer usuario
      * @param {string} userId2 - ID del segundo usuario
      * @returns {Promise<Object>} {id, user1_id, user2_id, created_at, last_message_at}
      */
     async createConversation(userId1, userId2) {
         try {
-            // Validar que los IDs sean diferentes
+            if (!userId1 || !userId2) {
+                const err = new Error('userId1 y userId2 son requeridos');
+                err.status = 400;
+                throw err;
+            }
+
             if (userId1 === userId2) {
-                throw new Error('Cannot create conversation with the same user');
+                const err = new Error('No puedes crear conversación contigo mismo');
+                err.status = 400;
+                throw err;
             }
 
             // Ordenar IDs para evitar duplicados
@@ -121,8 +165,7 @@ export const ChatService = {
             if (createError) throw createError;
             return newConversation;
         } catch (error) {
-            console.error('Error creating conversation:', error);
-            throw error;
+            throw ErrorHandler.handle(error, 'ChatService.createConversation');
         }
     }
 };

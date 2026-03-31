@@ -544,7 +544,94 @@ function cerrarModalTerminos() {
 }
 
 // ============================================
-// 🚀 INICIO DE LA APP
+// � CONFIGURACIÓN & GDPR
+// ============================================
+
+/**
+ * Abre modal de configuración (privacidad y GDPR)
+ */
+window.abrirConfiguracion = () => {
+  document.getElementById('configModal')?.classList.remove('hidden');
+};
+
+/**
+ * Cierra modal de configuración
+ */
+window.cerrarConfiguracion = () => {
+  document.getElementById('configModal')?.classList.add('hidden');
+};
+
+/**
+ * 📥 GDPR: Exporta todos los datos del usuario en JSON
+ */
+window.exportarMisDatos = async () => {
+  if (!confirm('Se descargará un archivo con todos tus datos. ¿Deseas continuar?')) {
+    return;
+  }
+
+  try {
+    UI.showLoading(true);
+    UI.notify("📥 Preparando tus datos...", "info");
+
+    const userData = await AuthService.exportUserData(GlobalState.currentUser.id);
+    
+    // Crear archivo JSON y descargar
+    const dataStr = JSON.stringify(userData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mascota-app-datos-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    
+    URL.revokeObjectURL(url);
+    window.cerrarConfiguracion();
+    UI.notify("✅ Datos descargados exitosamente", "success");
+  } catch (error) {
+    console.error('Error exportando datos:', error);
+    UI.notify(`❌ Error: ${error.message}`, "error");
+  } finally {
+    UI.showLoading(false);
+  }
+};
+
+/**
+ * 🗑️ GDPR: Solicita eliminación de datos (30 días de gracia)
+ */
+window.solicitarEliminacion = async () => {
+  if (!confirm('Esto solicitará la eliminación de tu cuenta y todos tus datos en 30 días. ¿Estás seguro?')) {
+    return;
+  }
+
+  const confirmEmail = prompt('Por favor, escribe tu email para confirmar:');
+  if (!confirmEmail || confirmEmail !== GlobalState.currentUser.email) {
+    UI.notify("❌ Email incorrecto. Operación cancelada.", "error");
+    return;
+  }
+
+  try {
+    UI.showLoading(true);
+    UI.notify("🗑️ Procesando solicitud de eliminación...", "info");
+
+    const result = await AuthService.requestDataDeletion(GlobalState.currentUser.id);
+    
+    window.cerrarConfiguracion();
+    UI.notify(result.message, "warning");
+    
+    // Logout automático después de solicitar eliminación
+    setTimeout(() => {
+      window.logout();
+    }, 3000);
+  } catch (error) {
+    console.error('Error solicitando eliminación:', error);
+    UI.notify(`❌ Error: ${error.message}`, "error");
+  } finally {
+    UI.showLoading(false);
+  }
+};
+
+// ============================================
+// �🚀 INICIO DE LA APP
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
